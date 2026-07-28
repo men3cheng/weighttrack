@@ -396,19 +396,15 @@ function renderSettings() {
 
     // 数据管理
     html += `<div class="settings-group"><div class="settings-group-title">数据管理</div><div class="settings-card">`;
-    html += `<div class="settings-row"><div><div class="label">导出数据</div><div class="desc">将所有记录保存为文件，用于备份或迁移</div></div></div>`;
-    html += `<div class="settings-row"><div><div class="label">导入数据</div><div class="desc">从备份文件恢复记录（将覆盖现有数据）</div></div></div>`;
-    html += `</div>`;
-    html += `<button class="settings-btn" onclick="exportData()">导出数据</button>`;
-    html += `<div style="height:8px"></div>`;
-    html += `<button class="settings-btn" onclick="document.getElementById('import-file-input').click()">导入数据</button>`;
-    html += `</div>`;
+    html += `<div class="settings-row" onclick="exportData()"><div><div class="label">导出数据</div><div class="desc">将所有记录保存为文件，用于备份或迁移</div></div><span style="color:var(--accent);font-size:20px">›</span></div>`;
+    html += `<div class="settings-row" onclick="document.getElementById('import-file-input').click()"><div><div class="label">导入数据</div><div class="desc">从备份文件恢复记录（将覆盖现有数据）</div></div><span style="color:var(--accent);font-size:20px">›</span></div>`;
+    html += `</div></div>`;
 
     // 数据统计
     html += `<div class="settings-group"><div class="settings-group-title">数据统计</div><div class="settings-card"><div class="settings-row"><span class="label">记录总数</span><span class="label" style="color:var(--text-secondary)">${entryCount} 条</span></div></div></div>`;
 
     // 关于
-    html += `<div class="settings-group"><div class="settings-group-title">关于</div><div class="settings-card"><div class="settings-row"><span class="label">应用名称</span><span class="label" style="color:var(--text-secondary)">体重记录</span></div><div class="settings-row"><span class="label">版本</span><span class="label" style="color:var(--text-secondary)">1.1.0</span></div></div></div>`;
+    html += `<div class="settings-group"><div class="settings-group-title">关于</div><div class="settings-card"><div class="settings-row"><span class="label">应用名称</span><span class="label" style="color:var(--text-secondary)">体重记录</span></div><div class="settings-row"><span class="label">版本</span><span class="label" style="color:var(--text-secondary)">1.1.1</span></div></div></div>`;
 
     container.innerHTML = html;
 
