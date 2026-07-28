@@ -51,7 +51,10 @@ function formatDate(date) {
     return `${d.getFullYear()}-${d.getMonth()+1}-${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
 }
 function formatShortDate(date) {
-    const d = new Date(date); return `${d.getMonth()+1}/${d.getDate()}`;
+    const d = new Date(date);
+    const thisYear = new Date().getFullYear();
+    const yearPrefix = d.getFullYear() !== thisYear ? `${d.getFullYear()}/` : '';
+    return `${yearPrefix}${d.getMonth()+1}/${d.getDate()}`;
 }
 function getRelativeDate(date) {
     const d = new Date(date), today = new Date(), yesterday = new Date();
@@ -60,6 +63,7 @@ function getRelativeDate(date) {
     if (d.toDateString() === yesterday.toDateString()) return '昨天';
     const diff = Math.floor((today - d) / 86400000);
     if (diff < 7) return ['周日','周一','周二','周三','周四','周五','周六'][d.getDay()];
+    // 非本年日期自动带年份
     return formatShortDate(date);
 }
 function toLocalISO(date) {
@@ -214,14 +218,25 @@ function saveEntry() {
 
 // ===== 趋势图表 =====
 let currentRange = 'month';
+let chartViewMode = 'chart'; // 'chart' | 'calendar'
+let calendarMonth = new Date();
+
 function renderChart() {
     const container = document.getElementById('chart-content');
     const all = getEntriesAsc();
-    const ul = getUnitLabel();
     if (all.length === 0) {
         container.innerHTML = '<div class="empty-state"><div class="icon">📊</div><div class="title">暂无数据</div><div class="desc">请先在「记录」页面添加数据</div></div>';
         return;
     }
+
+    let html = renderViewToggle();
+    if (chartViewMode === 'calendar') {
+        container.innerHTML = html + renderCalendarHTML();
+        bindViewToggle();
+        bindCalendarNav();
+        return;
+    }
+
     const now = new Date(); let startDate;
     switch (currentRange) {
         case 'week': startDate = new Date(now.getTime() - 7*86400000); break;
@@ -231,15 +246,18 @@ function renderChart() {
     }
     const entries = all.filter(e => new Date(e.date) >= startDate);
     if (entries.length === 0) {
-        container.innerHTML = '<div class="empty-state"><div class="icon">📊</div><div class="title">该时间范围内暂无数据</div><div class="desc">试试切换其他时间范围</div></div>' + renderRangePicker();
+        container.innerHTML = html + '<div class="empty-state"><div class="icon">📊</div><div class="title">该时间范围内暂无数据</div><div class="desc">试试切换其他时间范围</div></div>' + renderRangePicker();
+        bindViewToggle();
+        bindRangePicker();
         return;
     }
+    const ul = getUnitLabel();
     const weights = entries.map(e => e.weight);
     const avg = weights.reduce((a,b)=>a+b,0) / weights.length;
     const change = weights[weights.length-1] - weights[0];
     const cc = change > 0 ? 'var(--red)' : (change < 0 ? 'var(--green)' : 'var(--text-secondary)');
     const cs = change > 0 ? '+' : '';
-    let html = renderRangePicker();
+    html += renderRangePicker();
     html += `<div class="chart-summary"><div class="summary-card" style="background:rgba(0,122,255,0.1)"><div class="label">平均</div><div class="value" style="color:var(--blue)">${formatWeight(avg)}<span class="unit"> ${ul}</span></div></div><div class="summary-card" style="background:${change>0?'rgba(255,59,48,0.1)':(change<0?'rgba(52,199,89,0.1)':'rgba(142,142,147,0.1)')}"><div class="label">变化</div><div class="value" style="color:${cc}">${cs}${formatWeight(change)}<span class="unit"> ${ul}</span></div></div></div>`;
     html += `<div class="chart-container"><canvas id="weight-chart" height="220"></canvas></div>`;
     html += `<div class="stat-section-title" style="margin-top:20px">详细数据</div><div class="detail-list">`;
@@ -250,7 +268,25 @@ function renderChart() {
     container.innerHTML = html;
     drawChart(entries);
     bindRangePicker();
+    bindViewToggle();
 }
+
+function renderViewToggle() {
+    return `
+        <div class="view-toggle">
+            <button class="view-btn ${chartViewMode==='chart'?'active':''}" data-view="chart" onclick="switchChartView('chart')">趋势图</button>
+            <button class="view-btn ${chartViewMode==='calendar'?'active':''}" data-view="calendar" onclick="switchChartView('calendar')">日历</button>
+        </div>
+    `;
+}
+function bindViewToggle() {
+    // no-op, onclick handles it
+}
+function switchChartView(mode) {
+    chartViewMode = mode;
+    renderChart();
+}
+
 function renderRangePicker() {
     const ranges = [{key:'week',label:'本周'},{key:'month',label:'本月'},{key:'quarter',label:'近三月'},{key:'all',label:'全部'}];
     let html = '<div class="range-picker">';
@@ -261,6 +297,70 @@ function bindRangePicker() {
     document.querySelectorAll('.range-btn').forEach(btn => {
         btn.addEventListener('click', () => { currentRange = btn.dataset.range; renderChart(); });
     });
+}
+
+// ===== 日历视图 =====
+function renderCalendarHTML() {
+    const y = calendarMonth.getFullYear();
+    const m = calendarMonth.getMonth();
+    const firstDay = new Date(y, m, 1);
+    const lastDay = new Date(y, m + 1, 0);
+    const startOffset = firstDay.getDay(); // 0=Sun
+    const daysInMonth = lastDay.getDate();
+
+    const entries = getEntriesAsc();
+    const dailyMap = {};
+    entries.forEach(e => {
+        const d = new Date(e.date);
+        const key = `${d.getFullYear()}-${d.getMonth()+1}-${d.getDate()}`;
+        if (!dailyMap[key]) dailyMap[key] = [];
+        dailyMap[key].push(e.weight);
+    });
+
+    const monthNames = ['一月','二月','三月','四月','五月','六月','七月','八月','九月','十月','十一月','十二月'];
+    const weekDays = ['日','一','二','三','四','五','六'];
+
+    let html = `
+        <div class="calendar-header">
+            <button class="cal-nav" onclick="changeCalendarMonth(-1)">‹</button>
+            <div class="cal-title">${y}年 ${monthNames[m]}</div>
+            <button class="cal-nav" onclick="changeCalendarMonth(1)">›</button>
+        </div>
+        <div class="calendar-card">
+            <div class="calendar-weekdays">
+                ${weekDays.map(wd => `<div class="weekday">${wd}</div>`).join('')}
+            </div>
+            <div class="calendar-grid">
+    `;
+
+    // empty cells before the 1st
+    for (let i = 0; i < startOffset; i++) {
+        html += '<div class="calendar-day empty"></div>';
+    }
+
+    const today = new Date();
+    for (let day = 1; day <= daysInMonth; day++) {
+        const dateKey = `${y}-${m+1}-${day}`;
+        const weights = dailyMap[dateKey];
+        const isToday = y === today.getFullYear() && m === today.getMonth() && day === today.getDate();
+        let cellClass = 'calendar-day' + (isToday ? ' today' : '');
+        let content = `<div class="day-number">${day}</div>`;
+        if (weights && weights.length > 0) {
+            const avg = weights.reduce((a,b)=>a+b,0) / weights.length;
+            content += `<div class="day-weight">${formatWeight(avg)}</div>`;
+        }
+        html += `<div class="${cellClass}">${content}</div>`;
+    }
+
+    html += '</div></div>';
+    return html;
+}
+function changeCalendarMonth(delta) {
+    calendarMonth = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + delta, 1);
+    renderChart();
+}
+function bindCalendarNav() {
+    // no-op, onclick handles it
 }
 
 // ===== Canvas 图表 =====
@@ -315,9 +415,14 @@ function drawChart(entries) {
     });
     ctx.textBaseline = 'top';
     const di = Math.ceil(points.length / 5);
+    const thisYear = new Date().getFullYear();
     points.forEach((p, i) => {
         if (i % di === 0 || i === points.length-1) {
-            ctx.fillStyle = tc; ctx.fillText(formatShortDate(p.entry.date), p.x, H-pad.bottom+6);
+            const d = new Date(p.entry.date);
+            const label = d.getFullYear() !== thisYear
+                ? `${d.getFullYear()}/${d.getMonth()+1}/${d.getDate()}`
+                : formatShortDate(p.entry.date);
+            ctx.fillStyle = tc; ctx.fillText(label, p.x, H-pad.bottom+6);
         }
     });
 }
