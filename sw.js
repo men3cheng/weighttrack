@@ -1,4 +1,4 @@
-const CACHE_NAME = 'weighttrack-v1';
+const CACHE_NAME = 'weighttrack-v2';
 const ASSETS = [
     './',
     './index.html',
