@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="体重记录">
+    <meta name="theme-color" content="#FF9500">
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="icon.svg">
+    <title>体重记录</title>
+    <style>
+        /* ===== 重置 & 基础 ===== */
+        * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        :root {
+            --accent: #FF9500;
+            --accent-light: rgba(255, 149, 0, 0.12);
+            --bg: #F2F2F7;
+            --card: #FFFFFF;
+            --text: #000000;
+            --text-secondary: #8E8E93;
+            --text-tertiary: #C7C7CC;
+            --separator: rgba(60, 60, 67, 0.12);
+            --red: #FF3B30;
+            --green: #34C759;
+            --blue: #007AFF;
+            --radius: 12px;
+            --safe-bottom: env(safe-area-inset-bottom, 0px);
+            --safe-top: env(safe-area-inset-top, 0px);
+        }
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg: #000000;
+                --card: #1C1C1E;
+                --text: #FFFFFF;
+                --text-secondary: #8E8E93;
+                --text-tertiary: #48484A;
+                --separator: rgba(84, 84, 88, 0.36);
+            }
+        }
+        html, body {
+            height: 100%;
+            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            font-size: 16px;
+            -webkit-font-smoothing: antialiased;
+            overscroll-behavior: none;
+        }
+
+        /* ===== App 布局 ===== */
+        #app {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            height: 100dvh;
+            padding-top: var(--safe-top);
+        }
+        .page {
+            flex: 1;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+            display: none;
+            flex-direction: column;
+        }
+        .page.active { display: flex; }
+
+        /* ===== 顶部导航栏 ===== */
+        .nav-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 20px 8px;
+            background: var(--bg);
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+        .nav-title {
+            font-size: 32px;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+        }
+        .nav-btn {
+            width: 36px; height: 36px;
+            border: none;
+            background: none;
+            color: var(--accent);
+            font-size: 22px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            transition: opacity 0.15s;
+        }
+        .nav-btn:active { opacity: 0.5; }
+
+        /* ===== 内容区 ===== */
+        .content {
+            flex: 1;
+            padding: 0 16px 100px;
+            overflow-y: auto;
+        }
+
+        /* ===== 记录列表 ===== */
+        .record-list { display: flex; flex-direction: column; gap: 8px; }
+        .record-item {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 14px;
+            background: var(--card);
+            border-radius: var(--radius);
+            cursor: pointer;
+            transition: transform 0.1s;
+            position: relative;
+            overflow: hidden;
+        }
+        .record-item:active { transform: scale(0.98); }
+        .record-date {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            min-width: 56px;
+        }
+        .record-date .rel { font-size: 14px; font-weight: 600; }
+        .record-date .abs { font-size: 11px; color: var(--text-secondary); }
+        .record-divider { width: 1px; height: 36px; background: var(--separator); }
+        .record-info { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+        .record-weight { display: flex; align-items: baseline; gap: 4px; }
+        .record-weight .val { font-size: 22px; font-weight: 700; }
+        .record-weight .unit { font-size: 12px; color: var(--text-secondary); }
+        .record-note { font-size: 12px; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .record-chevron { color: var(--text-tertiary); font-size: 13px; }
+        .record-delete {
+            position: absolute;
+            right: 0; top: 0; bottom: 0;
+            width: 80px;
+            background: var(--red);
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            font-weight: 600;
+            transform: translateX(100%);
+            transition: transform 0.25s ease;
+        }
+        .record-item.swiped .record-delete { transform: translateX(0); }
+        .record-item.swiped .record-content { transform: translateX(-80px); }
+        .record-content {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            width: 100%;
+            transition: transform 0.25s ease;
+        }
+
+        /* ===== 空状态 ===== */
+        .empty-state {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 16px;
+            padding: 60px 20px;
+            text-align: center;
+        }
+        .empty-state .icon { font-size: 60px; opacity: 0.3; }
+        .empty-state .title { font-size: 20px; font-weight: 600; }
+        .empty-state .desc { font-size: 15px; color: var(--text-secondary); }
+        .empty-state .btn {
+            padding: 12px 32px;
+            background: var(--accent);
+            color: #fff;
+            border: none;
+            border-radius: 24px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        /* ===== 底部 Tab Bar ===== */
+        .tab-bar {
+            display: flex;
+            background: var(--card);
+            border-top: 0.5px solid var(--separator);
+            padding-bottom: var(--safe-bottom);
+            position: sticky;
+            bottom: 0;
+        }
+        .tab-item {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 2px;
+            padding: 8px 0 6px;
+            border: none;
+            background: none;
+            color: var(--text-secondary);
+            font-size: 10px;
+            cursor: pointer;
+            transition: color 0.15s;
+        }
+        .tab-item.active { color: var(--accent); }
+        .tab-item svg { width: 26px; height: 26px; fill: currentColor; }
+
+        /* ===== 时间范围选择器 ===== */
+        .range-picker {
+            display: flex;
+            background: var(--separator);
+            border-radius: 9px;
+            padding: 2px;
+            margin-bottom: 16px;
+        }
+        .range-btn {
+            flex: 1;
+            padding: 7px 4px;
+            border: none;
+            background: none;
+            color: var(--text);
+            font-size: 13px;
+            font-weight: 500;
+            border-radius: 7px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .range-btn.active {
+            background: var(--card);
+            font-weight: 600;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        /* ===== 图表容器 ===== */
+        .chart-container {
+            background: var(--card);
+            border-radius: 16px;
+            padding: 16px;
+            margin-bottom: 16px;
+        }
+        .chart-container canvas { width: 100%; }
+        .chart-summary {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+        .summary-card {
+            flex: 1;
+            padding: 14px;
+            border-radius: 14px;
+            text-align: center;
+        }
+        .summary-card .label { font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; }
+        .summary-card .value { font-size: 20px; font-weight: 700; }
+        .summary-card .value .unit { font-size: 12px; font-weight: 400; color: var(--text-secondary); }
+
+        /* ===== 统计页卡片 ===== */
+        .stat-section { margin-bottom: 20px; }
+        .stat-section-title { font-size: 15px; font-weight: 600; margin-bottom: 8px; padding: 0 4px; }
+        .stat-card {
+            background: var(--card);
+            border-radius: 16px;
+            padding: 20px;
+            margin-bottom: 12px;
+        }
+        .stat-current {
+            text-align: center;
+            padding: 32px 20px;
+            background: var(--accent-light);
+            border-radius: 20px;
+            margin-bottom: 20px;
+        }
+        .stat-current .label { font-size: 14px; color: var(--text-secondary); margin-bottom: 8px; }
+        .stat-current .weight { font-size: 52px; font-weight: 700; letter-spacing: -1px; }
+        .stat-current .weight .unit { font-size: 20px; color: var(--text-secondary); font-weight: 400; }
+        .stat-current .date { font-size: 12px; color: var(--text-secondary); margin-top: 8px; }
+
+        .stat-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+        .stat-cell {
+            background: var(--card);
+            border-radius: 14px;
+            padding: 16px;
+            text-align: center;
+        }
+        .stat-cell .icon { font-size: 24px; margin-bottom: 8px; }
+        .stat-cell .label { font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; }
+        .stat-cell .value { font-size: 20px; font-weight: 700; }
+        .stat-cell .value .unit { font-size: 12px; font-weight: 400; color: var(--text-secondary); }
+
+        .change-row { display: flex; align-items: center; gap: 16px; }
+        .change-item { flex: 1; text-align: center; }
+        .change-item .label { font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; }
+        .change-item .val { font-size: 18px; font-weight: 700; }
+        .change-item .val .unit { font-size: 12px; font-weight: 400; color: var(--text-secondary); }
+        .change-divider { width: 1px; height: 44px; background: var(--separator); }
+
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 0;
+            border-bottom: 0.5px solid var(--separator);
+        }
+        .info-row:last-child { border-bottom: none; }
+        .info-row .label { font-size: 14px; color: var(--text-secondary); }
+        .info-row .value { font-size: 14px; font-weight: 500; }
+
+        .bmi-badge {
+            display: inline-block;
+            padding: 2px 10px;
+            border-radius: 12px;
+            font-size: 13px;
+            font-weight: 600;
+            margin-left: 6px;
+        }
+
+        /* ===== 弹窗 Modal ===== */
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.4);
+            z-index: 100;
+            display: none;
+            justify-content: center;
+            align-items: flex-end;
+            animation: fadeIn 0.2s ease;
+        }
+        .modal-overlay.show { display: flex; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .modal {
+            background: var(--bg);
+            border-radius: 16px 16px 0 0;
+            width: 100%;
+            max-width: 500px;
+            max-height: 90vh;
+            overflow-y: auto;
+            padding-bottom: var(--safe-bottom);
+            animation: slideUp 0.3s ease;
+        }
+        @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px 20px;
+            border-bottom: 0.5px solid var(--separator);
+        }
+        .modal-header .btn {
+            border: none;
+            background: none;
+            font-size: 16px;
+            color: var(--text-secondary);
+            cursor: pointer;
+        }
+        .modal-header .btn.primary { color: var(--accent); font-weight: 600; }
+        .modal-header .title { font-size: 16px; font-weight: 600; }
+
+        .modal-body { padding: 20px; }
+        .form-group { margin-bottom: 24px; }
+        .form-label { font-size: 13px; color: var(--text-secondary); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
+
+        .weight-display {
+            text-align: center;
+            margin-bottom: 16px;
+        }
+        .weight-display .val {
+            font-size: 48px;
+            font-weight: 700;
+            font-variant-numeric: tabular-nums;
+        }
+        .weight-display .unit { font-size: 18px; color: var(--text-secondary); }
+
+        .weight-slider {
+            width: 100%;
+            height: 36px;
+            -webkit-appearance: none;
+            appearance: none;
+            background: var(--separator);
+            border-radius: 18px;
+            outline: none;
+            margin-bottom: 12px;
+        }
+        .weight-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 36px; height: 36px;
+            border-radius: 50%;
+            background: #fff;
+            border: none;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            cursor: pointer;
+        }
+        .weight-slider::-moz-range-thumb {
+            width: 36px; height: 36px;
+            border-radius: 50%;
+            background: #fff;
+            border: none;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            cursor: pointer;
+        }
+
+        .quick-btns { display: flex; gap: 8px; justify-content: center; margin-bottom: 16px; }
+        .quick-btn {
+            padding: 6px 16px;
+            border: none;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 12px 14px;
+            border: none;
+            background: var(--card);
+            border-radius: 10px;
+            font-size: 16px;
+            color: var(--text);
+            outline: none;
+        }
+        .form-input:focus { box-shadow: 0 0 0 2px var(--accent); }
+        textarea.form-input { resize: none; min-height: 60px; font-family: inherit; }
+
+        .input-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 14px;
+            background: var(--card);
+            border-radius: 10px;
+        }
+        .input-row label { font-size: 16px; color: var(--text); }
+        .input-row input[type="number"] {
+            width: 80px;
+            text-align: right;
+            border: none;
+            background: none;
+            font-size: 16px;
+            color: var(--text);
+            outline: none;
+        }
+        .input-row input[type="datetime-local"] {
+            border: none;
+            background: none;
+            font-size: 16px;
+            color: var(--text);
+            outline: none;
+        }
+
+        /* ===== Toast ===== */
+        .toast {
+            position: fixed;
+            bottom: 100px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.8);
+            color: #fff;
+            padding: 10px 24px;
+            border-radius: 20px;
+            font-size: 14px;
+            z-index: 200;
+            opacity: 0;
+            transition: opacity 0.3s;
+            pointer-events: none;
+        }
+        .toast.show { opacity: 1; }
+
+        /* ===== 详细数据列表 ===== */
+        .detail-list { display: flex; flex-direction: column; gap: 6px; }
+        .detail-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 16px;
+            background: var(--card);
+            border-radius: 10px;
+            font-size: 14px;
+        }
+        .detail-item .weight { font-weight: 600; }
+    </style>
+</head>
+<body>
+<div id="app">
+    <!-- 记录页 -->
+    <div class="page active" id="page-records">
+        <div class="nav-bar">
+            <div class="nav-title">体重记录</div>
+            <button class="nav-btn" onclick="openAddModal()">＋</button>
+        </div>
+        <div class="content" id="records-content"></div>
+    </div>
+
+    <!-- 趋势页 -->
+    <div class="page" id="page-chart">
+        <div class="nav-bar">
+            <div class="nav-title">体重趋势</div>
+        </div>
+        <div class="content" id="chart-content"></div>
+    </div>
+
+    <!-- 统计页 -->
+    <div class="page" id="page-stats">
+        <div class="nav-bar">
+            <div class="nav-title">统计</div>
+        </div>
+        <div class="content" id="stats-content"></div>
+    </div>
+
+    <!-- 底部 Tab Bar -->
+    <div class="tab-bar">
+        <button class="tab-item active" data-page="records" onclick="switchPage('records')">
+            <svg viewBox="0 0 24 24"><path d="M4 6h16v2H4zm0 5h16v2H4zm0 5h16v2H4z"/></svg>
+            <span>记录</span>
+        </button>
+        <button class="tab-item" data-page="chart" onclick="switchPage('chart')">
+            <svg viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8v6h2V3h-7v2h6l-9 9-4-4-7 7z"/></svg>
+            <span>趋势</span>
+        </button>
+        <button class="tab-item" data-page="stats" onclick="switchPage('stats')">
+            <svg viewBox="0 0 24 24"><path d="M4 4h6v6H4zm10 0h6v6h-6zM4 14h6v6H4zm10 0h6v6h-6z"/></svg>
+            <span>统计</span>
+        </button>
+    </div>
+</div>
+
+<!-- 添加/编辑弹窗 -->
+<div class="modal-overlay" id="modal-overlay" onclick="closeModal(event)">
+    <div class="modal" id="modal">
+        <div class="modal-header">
+            <button class="btn" onclick="closeModal()">取消</button>
+            <span class="title" id="modal-title">添加记录</span>
+            <button class="btn primary" onclick="saveEntry()">保存</button>
+        </div>
+        <div class="modal-body">
+            <div class="form-group">
+                <div class="form-label">体重</div>
+                <div class="weight-display">
+                    <span class="val" id="weight-val">65.0</span>
+                    <span class="unit">kg</span>
+                </div>
+                <input type="range" class="weight-slider" id="weight-slider" min="30" max="200" step="0.1" value="65" oninput="onSliderChange()">
+                <div class="quick-btns">
+                    <button class="quick-btn" style="background:rgba(255,59,48,0.12);color:var(--red)" onclick="adjustWeight(-0.5)">-0.5</button>
+                    <button class="quick-btn" style="background:rgba(255,149,0,0.12);color:var(--accent)" onclick="adjustWeight(-0.1)">-0.1</button>
+                    <button class="quick-btn" style="background:rgba(52,199,89,0.12);color:var(--green)" onclick="adjustWeight(0.1)">+0.1</button>
+                    <button class="quick-btn" style="background:rgba(0,122,255,0.12);color:var(--blue)" onclick="adjustWeight(0.5)">+0.5</button>
+                </div>
+                <div class="input-row">
+                    <label>精确输入</label>
+                    <input type="number" id="weight-input" step="0.1" value="65.0" oninput="onInputChange()">
+                </div>
+            </div>
+            <div class="form-group">
+                <div class="form-label">时间</div>
+                <div class="input-row">
+                    <input type="datetime-local" id="date-input">
+                </div>
+            </div>
+            <div class="form-group">
+                <div class="form-label">备注</div>
+                <textarea class="form-input" id="note-input" placeholder="添加备注（可选）" rows="2"></textarea>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
